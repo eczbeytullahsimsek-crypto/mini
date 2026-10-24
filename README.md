@@ -1,61 +1,43 @@
-# Atelier Pad — Kotlin / Jetpack Compose
+# Atelier Pad 3.0 — HTML arayüz, Kotlin motor
 
-Eklenen **Nordic Atelier** referansının Android için yerel uygulaması. HTML veya WebView kullanılmaz. Krem yüzeyler, üç renk kitap kapağı, cilt çizgileri, Newsreader / Manrope tipografisi, kitaplık kartları, kenar menüsü ve yüzen araç çubuğu Compose ile çizilir. Fontlar uygulamaya gömülüdür; internet gerekmez.
+Nordic Atelier referansına göre hazırlanmış, tamamen yerel ve çevrimdışı Android uygulaması. **Compose kullanılmaz.** Arayüz HTML/CSS/JavaScript, veri ve Android işlemleri Kotlin'dir.
 
-## Çalıştırma
+## Mimari
 
-1. Projeyi **Android Studio Meerkat veya daha yeni** sürümünde açın.
-2. Gradle JDK olarak **JDK 17** seçin; **Android SDK 35** kurulu olsun.
-3. Gradle senkronizasyonunu tamamlayın ve `app` yapılandırmasını çalıştırın.
-4. Referans düzeni için yatay tablet / yeniden boyutlandırılabilir emülatör kullanın (ör. **1280 × 1024 dp**).
+- `app/src/main/assets/`: bağımsız HTML/CSS/JS; APK'ya gömülü Manrope ve Newsreader fontları. CDN, Tailwind çalışma zamanı veya internet bağımlılığı yoktur.
+- `MainActivity.kt`: donanım hızlandırmalı WebView, güvenli WebMessage köprüsü, görsel seçimi ve arka plan iş kuyruğu.
+- `Library.kt`: Room/SQLite, not işlemleri, önceki sürümün SharedPreferences verilerinin bir kerelik aktarımı. İçe aktarma hatası kullanıcı verisini örnek içerikle değiştirmez.
+- Köprü yalnızca `https://appassets.androidplatform.net` ana çerçevesinden çağrılabilir. Dosya erişimi, dış gezinme ve dış ağ istekleri kapalı; CSP etkin. Kullanıcı notları HTML olarak çalıştırılmaz.
+
+## Özellikler
+
+Arama (not içeriği dahil), klasörler, favoriler, sıralama, yeni not/klasör, üç renk kapak, metin düzenleme, 700 ms gecikmeli otomatik kayıt, fotoğraf ekleme, çöp kutusu, geri yükleme ve onaylı kalıcı silme. Masaüstü/tablet düzeni referansı takip eder; telefonda menü açılır ve kartlar uyarlanır.
+
+## Performans tercihleri
+
+- Room erişimi ve görsel çözme ana iş parçacığında yapılmaz.
+- Not listesi tam içerik veya fotoğraf taşımaz; yalnızca açılan notun içeriği alınır.
+- Arama 220 ms gecikmelidir; Kotlin tarafında yapılır. Çok büyük kitaplıklarda SQL tabanlı arama/sayfalama bir sonraki optimizasyondur; mevcut sürüm arama için kayıtları arka planda tarar.
+- Kartlar 40'lık gruplarla oluşturulur, `content-visibility` kullanılır.
+- Ağır blur ve sürekli animasyon yoktur; görseller en fazla yaklaşık 1600 px boyutuna örneklenir.
+- Her not ayrı kaydedilir; bütün kitaplık her tuşta tekrar yazılmaz.
+
+Akıcılık garantisi verilmez: hedef Android cihazda release profillemesi henüz yapılmadı. El yazısı çizim/OCR yoktur; kalem simgeleri hızlı metin notu oluşturur. Fotoğraf simgesi sistem seçicisini açar. iCloud entegrasyonu yoktur; durum bilgisi gerçek yerel kaydı ifade eder. Önceki sürümdeki URI tabanlı fotoğraflar veritabanında korunur; yeni HTML editörü yalnızca bu sürümde eklenmiş veri-URL fotoğraflarını gösterir.
+
+## APK
+
+GitHub **Actions → Android APK → başarılı çalıştırma → Artifacts → Atelier-Pad-debug-APK** üzerinden ZIP'i indirin. ZIP içindeki `app-debug.apk` dosyasını Android cihazda açın. Debug APK test içindir; mağaza yayını için kişisel release imzası gerekir. Artifact 30 gün saklanır.
+
+`main` veya çalışma dalına push APK derlemesini ve birim testlerini tetikler.
+
+## Yerel derleme
+
+Android Studio Meerkat+, JDK 17, Android SDK 35, minimum Android 8 / API 26 ve güncel Android System WebView gerekir.
 
 ```sh
-./gradlew testDebugUnitTest
-./gradlew assembleDebug
+./gradlew testDebugUnitTest assembleDebug
 ```
 
 APK: `app/build/outputs/apk/debug/app-debug.apk`
 
-İlk senkronizasyonda Gradle, Google Maven ve Maven Central erişimi gerekir. `local.properties` dosyası cihazınıza özeldir; Android Studio oluşturur.
-
-## Özellikler
-
-- Geniş tablette solda kalıcı menü ve dört sütun; dar tablette iki/üç sütun, telefonda açılır menü ve uyarlanabilir kartlar.
-- Türkçe kitaplık; başlık, açıklama, etiket, kapak ve not içeriğinde arama.
-- Klasör / defter filtreleri, favoriler, alfabetik veya son değiştirilme sıralaması.
-- Yeni defter ve klasör oluşturma, kapak rengi seçimi, klasör içinde yeni not.
-- Metin notlarını düzenleme ve kaydetme; geri tuşuyla çıkarken otomatik kayıt.
-- Fotoğraf seçicisinden görsel ekleme; notta görsel ve metni birlikte görüntüleme.
-- Çöp kutusuna taşıma, geri yükleme ve onayla kalıcı silme.
-- Yerel JSON / SharedPreferences saklama; uygulama yeniden açıldığında notlar korunur.
-- Erişilebilir ikon açıklamaları; kaynak fotoğraflar için kalıcı okuma izni.
-
-## Referanstan bilinçli farklar / sınırlar
-
-- Referanstaki **“iCloud Eşitlendi”** alanı gerçek bir bulut entegrasyonu varmış izlenimi vermemek için **“Cihazda kaydedildi”** olarak gösterilir. Bulut senkronizasyonu yoktur.
-- Kalem simgeleri hızlı **metin notu** oluşturur. El yazısı çizim, OCR ve gerçek kamera çekimi bu sürümün kapsamına dahil değildir; kamera simgesi sistemin görsel/dosya seçicisini açar.
-- İlk ekrandaki akademik klasör referanstaki “6 Not Defteri” bilgisini taşır; bu altı defterin içeriği tasarım eklerinde bulunmadığından üretilmemiştir. Klasöre not eklendikçe gerçek yerel sayı gösterilir.
-- Android sistem çubukları ve ekran yoğunluğu nedeniyle piksel düzeyinde aynılık cihazdan cihaza değişebilir; referansın masaüstü tasarımı dp birimleriyle tablet düzenine aktarılmıştır.
-- Bu çalışma ortamında Java / Android SDK bulunmadığından Gradle derlemesi ve emülatör / ekran görüntüsü karşılaştırması çalıştırılamamıştır. APK teslimi değil, Android Studio kaynak projesidir.
-
-## Dosyalar
-
-- `app/src/main/java/com/atelier/pad/MainActivity.kt`: Compose ekranları, yerel görsel seçici, not editörü.
-- `app/src/main/java/com/atelier/pad/Library.kt`: örnek kitaplık, veri modeli ve yerel saklama.
-- `app/src/main/res/font/`: çevrimdışı Manrope ve Newsreader fontları.
-- `licenses/`: SIL Open Font License metinleri.
-- `docs/`: kullanıcının sağladığı tasarım rehberi ve ekran referansı.
-
-Minimum Android: **8.0 / API 26**. Hedef: **API 35**. Kotlin **2.1.20**, AGP **8.9.1**, Gradle **8.11.1**.
-
-## Android Studio olmadan APK (GitHub Actions)
-
-`arena/d1f3a270-mini` dalına gönderildiğinde **Android APK** iş akışı testleri ve debug APK derlemesini otomatik çalıştırır.
-
-1. GitHub deposunda **Actions → Android APK** ekranını açın.
-2. Son başarılı çalıştırmayı açın.
-3. Sayfanın altındaki **Artifacts → Atelier-Pad-debug-APK** dosyasını indirin.
-4. ZIP'i çıkarın ve `app-debug.apk` dosyasını Android cihazınıza aktarın.
-5. Cihazınızda bu dosyayı açın; gerekirse dosyayı açan uygulamaya “Bilinmeyen uygulamaları yükle” izni verin.
-
-Bu APK geliştirme/test içindir ve debug anahtarıyla imzalanır; Google Play yayını için kişisel imza anahtarıyla release derlemesi gerekir. APK artifact'i 30 gün saklanır. İş akışı `workflow_dispatch` ile bu daldan yeniden çalıştırılabilir (GitHub arayüzündeki manuel çalıştırma düğmesinin görünmesi için workflow'un varsayılan dalda da bulunması gerekebilir).
+Font lisansları `licenses/`, tasarım referansı `docs/` içindedir. Emülatör ve fiziksel cihaz görsel karşılaştırması ayrıca yapılmalıdır.

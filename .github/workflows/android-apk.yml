@@ -2,7 +2,7 @@ name: Android APK
 
 on:
   push:
-    branches: ["arena/d1f3a270-mini"]
+    branches: ["arena/d1f3a270-mini", "main"]
   workflow_dispatch:
 
 permissions:

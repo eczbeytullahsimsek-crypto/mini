@@ -1,15 +1,13 @@
 package com.atelier.pad
 
-import android.app.Application
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.lifecycle.AndroidViewModel
+import android.content.Context
+import androidx.room.*
 import org.json.JSONArray
 import org.json.JSONObject
 
+@Entity(tableName = "notebooks")
 data class Notebook(
-    val id: String,
+    @PrimaryKey val id: String,
     val title: String,
     val description: String = "",
     val coverTitle: String = title,
@@ -28,48 +26,56 @@ data class Notebook(
     val imageUri: String = ""
 )
 
-class Library(application: Application) : AndroidViewModel(application) {
-    private val preferences = application.getSharedPreferences("atelier_library", 0)
-    var books by mutableStateOf(load())
-        private set
 
-    private fun load(): List<Notebook> {
-        val saved = preferences.getString("books", null) ?: return samples()
-        return runCatching {
-            val array = JSONArray(saved)
-            (0 until array.length()).map { index ->
-                val o = array.getJSONObject(index)
-                Notebook(o.getString("id"), o.getString("title"), o.optString("description"),
-                    o.getString("coverTitle"), o.getString("coverSubtitle"), o.getString("tag"),
-                    o.getString("paper"), o.getInt("pages"), o.getInt("color"),
-                    o.getBoolean("favorite"), o.getBoolean("folder"), o.getBoolean("deleted"),
-                    o.optString("content"), o.getLong("modified"), o.getString("date"),
-                    o.optString("parentId").takeIf { it.isNotEmpty() }, o.optString("imageUri"))
-            }
-        }.getOrElse { samples() }
-    }
-
-    fun put(book: Notebook) {
-        books = if (books.any { it.id == book.id }) books.map { if (it.id == book.id) book else it }
-            else books + book
-        persist()
-    }
-    fun remove(book: Notebook) { books = books.filterNot { it.id == book.id }; persist() }
-    private fun persist() {
-        val array = JSONArray()
-        books.forEach { b -> array.put(JSONObject().apply {
-            put("id", b.id); put("title", b.title); put("description", b.description)
-            put("coverTitle", b.coverTitle); put("coverSubtitle", b.coverSubtitle)
-            put("tag", b.tag); put("paper", b.paper); put("pages", b.pages); put("color", b.color)
-            put("favorite", b.favorite); put("folder", b.folder); put("deleted", b.deleted)
-            put("content", b.content); put("modified", b.modified); put("date", b.date)
-            put("parentId", b.parentId ?: ""); put("imageUri", b.imageUri)
-        }) }
-        preferences.edit().putString("books", array.toString()).apply()
-    }
+@Dao
+interface NotebookDao {
+    @Query("SELECT * FROM notebooks ORDER BY modified DESC") fun all(): List<Notebook>
+    @Query("SELECT * FROM notebooks WHERE id = :id") fun get(id: String): Notebook?
+    @Insert(onConflict = OnConflictStrategy.REPLACE) fun put(book: Notebook)
+    @Query("DELETE FROM notebooks WHERE id = :id") fun remove(id: String)
 }
 
-private fun samples() = listOf(
+@Database(entities = [Notebook::class], version = 1, exportSchema = true)
+abstract class AtelierDatabase : RoomDatabase() { abstract fun notebooks(): NotebookDao }
+
+/** All calls are made on the activity's single background executor. */
+class Library(context: Context) {
+    private val db = Room.databaseBuilder(context.applicationContext, AtelierDatabase::class.java, "atelier.db").build()
+    val dao = db.notebooks()
+    init {
+        val prefs = context.getSharedPreferences("atelier_library", 0)
+        if (!prefs.getBoolean("room_imported", false)) {
+            val old = prefs.getString("books", null)
+            // A failed import must not silently overwrite existing user data.
+            val initial = if (old == null) samples() else JSONArray(old).let { a ->
+                (0 until a.length()).map { notebookFromJson(a.getJSONObject(it)) }
+            }
+            db.runInTransaction { initial.forEach { if (dao.get(it.id) == null) dao.put(it) } }
+            prefs.edit().putBoolean("room_imported", true).commit()
+        }
+    }
+    fun close() = db.close()
+}
+
+fun notebookFromJson(o: JSONObject) = Notebook(
+    id = o.getString("id"), title = o.getString("title"), description = o.optString("description"),
+    coverTitle = o.optString("coverTitle", o.getString("title")), coverSubtitle = o.optString("coverSubtitle", "Kişisel notlar"),
+    tag = o.optString("tag", "YENİ DEFTER"), paper = o.optString("paper", "Noktalı · Fildişi"), pages = o.optInt("pages", 1),
+    color = o.optInt("color"), favorite = o.optBoolean("favorite"), folder = o.optBoolean("folder"),
+    deleted = o.optBoolean("deleted"), content = o.optString("content"), modified = o.optLong("modified", System.currentTimeMillis()),
+    date = o.optString("date", "Bugün"), parentId = o.optString("parentId").takeIf { it.isNotEmpty() }, imageUri = o.optString("imageUri")
+)
+
+fun Notebook.json(full: Boolean = true) = JSONObject().apply {
+    put("id", id); put("title", title); put("description", description); put("coverTitle", coverTitle)
+    put("coverSubtitle", coverSubtitle); put("tag", tag); put("paper", paper); put("pages", pages)
+    put("color", color); put("favorite", favorite); put("folder", folder); put("deleted", deleted)
+    put("modified", modified); put("date", date); put("parentId", parentId ?: "")
+    // List responses never move full note bodies or photos across the WebView bridge.
+    if (full) { put("content", content); put("imageUri", imageUri) }
+}
+
+fun samples() = listOf(
     Notebook("academic", "Ders Notları & Tez", "Mimari tipolojiler, İskandinav formları ve tasarım eskizleri",
         favorite = true, folder = true, date = "Dün güncellendi", modified = 4),
     Notebook("urban", "İskandinav Strüktür Notları", "Ahşap birleşim detayları, kentsel eskizler",
