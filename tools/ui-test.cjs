@@ -8,7 +8,7 @@ const dom = new JSDOM(fs.readFileSync(path+'index.html','utf8'), {runScripts:'ou
 const w=dom.window, d=w.document;
 let data=[
  {id:'folder',title:'Akademik',folder:true,favorite:true,modified:1,date:'Bugün'},
- {id:'note',title:'<img src=x onerror=alert(1)>',coverTitle:'Kentsel\nEskizler',coverSubtitle:'Serisi',tag:'CİLT I',paper:'Noktalı',description:'Ahşap',content:'Metin',favorite:true,color:0,pages:48,modified:2,date:'Bugün'},
+ {id:'note',title:'<img src=x onerror=alert(1)>',coverTitle:'Kentsel\nEskizler',coverSubtitle:'Serisi',tag:'CİLT I',paper:'Noktalı',description:'Ahşap',content:'Metin',favorite:true,color:0,pages:1,modified:2,date:'Bugün'},
  {id:'trash',title:'Silinmiş',coverTitle:'Silinmiş',deleted:true,modified:3,date:'Bugün'}
 ];
 w.Atelier={postMessage(raw){
@@ -24,6 +24,9 @@ w.Atelier={postMessage(raw){
  queueMicrotask(()=>w.Atelier.onmessage({data:JSON.stringify({requestId:r.requestId,data:result})}));
 }};
 w.confirm=()=>true;
+w.HTMLCanvasElement.prototype.getContext=function(){return new Proxy({}, {get:(target,key)=>target[key] || (()=>{}),set:(target,key,value)=>{target[key]=value;return true;}});};
+w.HTMLCanvasElement.prototype.setPointerCapture=function(){};
+w.eval(fs.readFileSync(path+'studio.js','utf8'));
 w.eval(fs.readFileSync(path+'app.js','utf8'));
 const tick=()=>new Promise(r=>setTimeout(r,10));
 (async()=>{
@@ -36,6 +39,21 @@ const tick=()=>new Promise(r=>setTimeout(r,10));
  d.querySelector('[data-open="note"]').click();await tick();assert.equal(d.getElementById('editor').hidden,false);
  d.getElementById('noteBody').value='Düzenlenen not';d.getElementById('noteBody').dispatchEvent(new w.Event('input'));
  d.getElementById('save').click();await tick();assert.equal(data[1].content,'Düzenlenen not');
+ // Page state, undo and paper configuration are real document changes.
+ d.getElementById('addPage').click();
+ assert.equal(w.InkStudio.document().pages.length,2);
+ d.getElementById('starPage').click();
+ assert.equal(w.InkStudio.document().pages[1].starred,true);
+ d.getElementById('prevPage').click();
+ assert.equal(d.getElementById('pageNumber').textContent,'Sayfa 1 / 2');
+ d.querySelector('[data-template="cornell"]').click();
+ d.querySelector('[data-paper="slate"]').click();
+ d.querySelector('[data-spacing="28"]').click();
+ d.querySelector('[data-orientation="landscape"]').click();
+ const config=JSON.parse(w.TemplateStudio.document());
+ assert.equal(config.template,'cornell');assert.equal(config.paperColor,'slate');assert.equal(config.spacing,28);assert.equal(config.orientation,'landscape');
+ d.getElementById('save').click();await tick();
+ assert.equal(JSON.parse(data[1].document).pages.length,2);
  d.getElementById('delete').click();await tick();assert.equal(data[1].deleted,true);assert.equal(d.getElementById('editor').hidden,true);
  d.querySelector('[data-section="2"]').click();assert.equal(d.querySelectorAll('.card').length,2);
  d.querySelector('[data-open="note"]').click();await tick();assert.equal(d.getElementById('noteBody').readOnly,true);

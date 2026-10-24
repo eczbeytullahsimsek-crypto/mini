@@ -23,7 +23,8 @@ data class Notebook(
     val modified: Long = System.currentTimeMillis(),
     val date: String = "Bugün",
     val parentId: String? = null,
-    val imageUri: String = ""
+    val imageUri: String = "",
+    @ColumnInfo(defaultValue = "''") val document: String = ""
 )
 
 
@@ -35,12 +36,16 @@ interface NotebookDao {
     @Query("DELETE FROM notebooks WHERE id = :id") fun remove(id: String)
 }
 
-@Database(entities = [Notebook::class], version = 1, exportSchema = true)
+@Database(entities = [Notebook::class], version = 2, exportSchema = true)
 abstract class AtelierDatabase : RoomDatabase() { abstract fun notebooks(): NotebookDao }
 
 /** All calls are made on the activity's single background executor. */
 class Library(context: Context) {
-    private val db = Room.databaseBuilder(context.applicationContext, AtelierDatabase::class.java, "atelier.db").build()
+    private val db = Room.databaseBuilder(context.applicationContext, AtelierDatabase::class.java, "atelier.db").addMigrations(object : androidx.room.migration.Migration(1, 2) {
+        override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE notebooks ADD COLUMN document TEXT NOT NULL DEFAULT ''")
+        }
+    }).build()
     val dao = db.notebooks()
     init {
         val prefs = context.getSharedPreferences("atelier_library", 0)
@@ -72,7 +77,7 @@ fun Notebook.json(full: Boolean = true) = JSONObject().apply {
     put("color", color); put("favorite", favorite); put("folder", folder); put("deleted", deleted)
     put("modified", modified); put("date", date); put("parentId", parentId ?: "")
     // List responses never move full note bodies or photos across the WebView bridge.
-    if (full) { put("content", content); put("imageUri", imageUri) }
+    if (full) { put("content", content); put("imageUri", imageUri); put("document", document) }
 }
 
 fun samples() = listOf(
