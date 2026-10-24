@@ -30,7 +30,7 @@ data class Notebook(
 
 @Dao
 interface NotebookDao {
-    @Query("SELECT * FROM notebooks ORDER BY modified DESC") fun all(): List<Notebook>
+    @Query("SELECT id, title, description, coverTitle, coverSubtitle, tag, paper, pages, color, favorite, folder, deleted, content, modified, date, parentId, '' AS imageUri, '' AS document FROM notebooks ORDER BY modified DESC") fun all(): List<Notebook>
     @Query("SELECT * FROM notebooks WHERE id = :id") fun get(id: String): Notebook?
     @Insert(onConflict = OnConflictStrategy.REPLACE) fun put(book: Notebook)
     @Query("DELETE FROM notebooks WHERE id = :id") fun remove(id: String)

@@ -77,7 +77,7 @@
   if(active.tool==='lasso'){selection=page().strokes.map((s,i)=>s.tool!=='eraser'&&s.points.some(p=>inPolygon(p,lasso))?i:-1).filter(i=>i>=0);lasso=[];active=null;redraw();return;}
   const {pointer,straight,...stroke}=active;page().strokes.push(stroke);active=null;redraw();dirty();
  }
- function dimensions(){const ratio=doc.size==='a4'?Math.SQRT2:1.38;H=doc.orientation==='landscape'?Math.round(W/ratio):Math.round(W*ratio);const dpr=Math.min(window.devicePixelRatio||1,1.5);canvas.width=W*dpr;canvas.height=H*dpr;ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);$('drawingPage').style.aspectRatio=`${W}/${H}`;applyZoom();}
+ function dimensions(){const ratio=doc.size==='a4'?Math.SQRT2:1.38;H=doc.orientation==='landscape'?Math.round(W/ratio):Math.round(W*ratio);const dpr=Math.min(1.5,Math.max(1,(document.documentElement.clientWidth/W)*(window.devicePixelRatio||1)));canvas.width=W*dpr;canvas.height=H*dpr;ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);$('drawingPage').style.aspectRatio=`${W}/${H}`;applyZoom();}
  function applyZoom(){$('drawingPage').style.width=`${zoom*100}%`;$('zoomReset').textContent=Math.round(zoom*100)+'%';}
  function config(){decorate($('paperBackground'),doc);$('paperBackground').classList.toggle('cornell',doc.template==='cornell');$('cycleTemplate').textContent=label(doc);$('paperType').textContent=label(doc);}
  async function loadBackground(){const token=++bgVersion;bgImage=null;$('paperBackground').style.backgroundImage='';$('paperBackground').classList.remove('pdf-background');
@@ -111,7 +111,7 @@
   const text=(value,x,y,size=15,color='#424843',serif=false)=>strokes.push({text:value,size,color,serif,points:[{x,y}]});
   text('Ahşap Birleşim Detayları — Kırlangıç Kuyruğu Geçme',180,70,25,'#1d1b18',true);
   text('NOT 01: AKSLAR',35,70,12,'#685a44');text('Kuzey cephe',35,95,13);text('nem oranı %14',35,116,13);text('DIN 1052 std.',35,137,13);
-  line([[180,105],[595,105]],'#6c8372',22);
+  line([[180,105],[595,105]],'#6c8372',22);strokes[strokes.length-1].opacity=.22;
   text('Geleneksel Masif Çam Taşıyıcı & Birleşim Mukavemeti',184,111,14,'#4b6151');
   line([[220,180],[460,180],[520,230],[280,230],[220,180]]);
   line([[220,180],[220,240],[280,290],[280,230]]);
