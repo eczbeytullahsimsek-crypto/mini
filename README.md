@@ -22,7 +22,7 @@ Arama (not içeriği dahil), klasörler, favoriler, sıralama, yeni not/klasör,
 - Ağır blur ve sürekli animasyon yoktur; görseller en fazla yaklaşık 1600 px boyutuna örneklenir.
 - Her not ayrı kaydedilir; bütün kitaplık her tuşta tekrar yazılmaz.
 
-Akıcılık garantisi verilmez: hedef Android cihazda release profillemesi henüz yapılmadı. El yazısı çizim/OCR yoktur; kalem simgeleri hızlı metin notu oluşturur. Fotoğraf simgesi sistem seçicisini açar. iCloud entegrasyonu yoktur; durum bilgisi gerçek yerel kaydı ifade eder. Önceki sürümdeki URI tabanlı fotoğraflar veritabanında korunur; yeni HTML editörü yalnızca bu sürümde eklenmiş veri-URL fotoğraflarını gösterir.
+Akıcılık garantisi verilmez: hedef Android cihazda release profillemesi henüz yapılmadı. El yazısı çizim/OCR yoktur; kalem simgeleri hızlı metin notu oluşturur. Fotoğraf simgesi sistem seçicisini açar. iCloud entegrasyonu yoktur; durum bilgisi gerçek yerel kaydı ifade eder. Önceki sürümdeki URI tabanlı fotoğraflar, erişim izni hâlâ geçerliyse ilk açılışta yeni görsel formatına aktarılır.
 
 ## APK
 
@@ -41,3 +41,12 @@ Android Studio Meerkat+, JDK 17, Android SDK 35, minimum Android 8 / API 26 ve g
 APK: `app/build/outputs/apk/debug/app-debug.apk`
 
 Font lisansları `licenses/`, tasarım referansı `docs/` içindedir. Emülatör ve fiziksel cihaz görsel karşılaştırması ayrıca yapılmalıdır.
+
+## Arayüz mantık testleri
+
+```sh
+npm install --no-save --prefix .cache/ui-test jsdom@26
+NODE_PATH="$PWD/.cache/ui-test/node_modules" node tools/ui-test.cjs
+```
+
+Testler: kart oluşturma, kullanıcı HTML içeriğini kaçışlama, filtreler, favoriler, editör, kayıt, çöp kutusu ve geri yükleme. Bunlar gerçek Android WebView ve cihaz performans testinin yerine geçmez.

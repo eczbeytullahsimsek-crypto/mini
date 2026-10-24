@@ -29,22 +29,26 @@ class MainActivity : ComponentActivity() {
             contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             worker.execute {
                 runCatching {
-                    val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
-                    require(opts.outWidth > 0) { "Görsel okunamadı" }
-                    var sample = 1
-                    while (opts.outWidth / sample > 1600 || opts.outHeight / sample > 1600) sample *= 2
-                    val bitmap = contentResolver.openInputStream(uri)?.use {
-                        BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
-                    } ?: error("Görsel okunamadı")
-                    val bytes = ByteArrayOutputStream()
-                    bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, bytes); bitmap.recycle()
-                    val b = Notebook(UUID.randomUUID().toString(), "Fotoğraf Notu", imageUri = "data:image/jpeg;base64," + Base64.encodeToString(bytes.toByteArray(), Base64.NO_WRAP))
+                    val b = Notebook(UUID.randomUUID().toString(), "Fotoğraf Notu", imageUri = encodeImage(uri))
                     repository().dao.put(b)
                     runOnUiThread { web.evaluateJavascript("window.photoAdded(${JSONObject.quote(b.id)})", null) }
                 }.onFailure { runOnUiThread { web.evaluateJavascript("window.showError('Fotoğraf eklenemedi')", null) } }
             }
         }
+    }
+    private fun encodeImage(uri: Uri): String {
+        val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, opts) }
+        require(opts.outWidth > 0) { "Görsel okunamadı" }
+        var sample = 1
+        while (opts.outWidth / sample > 1600 || opts.outHeight / sample > 1600) sample *= 2
+        val bitmap = contentResolver.openInputStream(uri)?.use {
+            BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
+        } ?: error("Görsel okunamadı")
+        val bytes = ByteArrayOutputStream()
+        bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, bytes)
+        bitmap.recycle()
+        return "data:image/jpeg;base64," + Base64.encodeToString(bytes.toByteArray(), Base64.NO_WRAP)
     }
     private fun repository(): Library = library ?: Library(this).also { library = it }
 
@@ -113,7 +117,15 @@ class MainActivity : ComponentActivity() {
         if (action == "photo") { runOnUiThread { photo.launch(arrayOf("image/*")) }; return true }
         val book = dao.get(arg.getString("id")) ?: error("Not bulunamadı")
         when (action) {
-            "get" -> return book.json()
+            "get" -> {
+                // Import old Compose photo URIs lazily, outside the UI thread.
+                if (book.imageUri.startsWith("content://")) {
+                    val converted = book.copy(imageUri = encodeImage(Uri.parse(book.imageUri)))
+                    dao.put(converted)
+                    return converted.json()
+                }
+                return book.json()
+            }
             "save" -> {
                 require(!book.deleted)
                 val text = arg.optString("content").take(1_000_000)

@@ -28,6 +28,10 @@ jobs:
         uses: gradle/actions/setup-gradle@v5
       - name: Make wrapper executable
         run: chmod +x gradlew
+      - name: Test HTML interface logic
+        run: |
+          npm install --no-save --prefix .cache/ui-test jsdom@26.1.0
+          NODE_PATH="$PWD/.cache/ui-test/node_modules" node tools/ui-test.cjs
       - name: Test and build APK
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
       - name: Upload APK
