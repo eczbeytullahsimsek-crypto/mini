@@ -1,6 +1,18 @@
 'use strict';
 const $ = id => document.getElementById(id);
 const paths = {
+ upload:'M12 16V3m-5 5 5-5 5 5M3 16v5h18v-5',
+ grid:'M3 3h18v18H3zM9 3v18m6-18v18M3 9h18M3 15h18',
+ lines:'M3 5h18M3 10h18M3 15h18M3 20h12',
+ page:'M5 2h14v20H5z',cornell:'M3 3h18v18H3zM3 7h18M9 7v10M3 17h18',
+ dots:'M5 5h.01M12 5h.01M19 5h.01M5 12h.01M12 12h.01M19 12h.01M5 19h.01M12 19h.01M19 19h.01',
+ calendar:'M3 5h18v16H3zM7 2v6m10-6v6M3 10h18M9 10v11m6-11v11',
+ undo:'M9 5 3 11l6 6M3 11h10a7 7 0 0 1 7 9',redo:'m15 5 6 6-6 6m6-6H11a7 7 0 0 0-7 9',
+ eraser:'m3 14 9-11 9 8-9 10H9l-6-7Zm3-3 9 8M12 21h10',
+ lasso:'M6 19C-2 10 2 2 12 3s13 12 4 14S2 11 4 21',
+ ruler:'m3 16 13-13 5 5L8 21l-5-5ZM7 12l3 3m0-6 3 3m0-6 3 3',
+ text:'M3 4h18M12 4v17m-5 0h10',share:'M12 16V2m-5 5 5-5 5 5M4 12v10h16V12',
+ fullscreen:'M3 9V3h6m6 0h6v6m0 6v6h-6M9 21H3v-6',
  edit:'M4 5h12M4 10h8M4 15h5m4 5 1-5 6-6 3 3-6 6-4 2Z',
  folder:'M3 7V4h6l2 3h10v3M3 9h19l-4 11H2L3 9Z',
  foldercopy:'M8 7h13v13H8zM4 16H2V3h13v2',
@@ -64,9 +76,14 @@ $('gallery').onkeydown=e=>{if(e.target.matches('[data-open]')&&(e.key==='Enter'|
 let createFolder=false,color=0;
 function type(folder){createFolder=folder;$('typeFolder').classList.toggle('selected',folder);$('typeNote').classList.toggle('selected',!folder);$('colors').hidden=folder;$('name').placeholder=folder?'Klasör adı':'Defter adı';}
 $('typeFolder').onclick=()=>type(true);$('typeNote').onclick=()=>type(false);
-$('new').onclick=()=>{$('createForm').reset();type(false);$('create').showModal();};$('cancel').onclick=()=>$('create').close();
+function fab(open){$('fabMenu').hidden=!open;$('new').setAttribute('aria-expanded',String(open));}
+$('new').onclick=()=>fab($('fabMenu').hidden);
+function newNotebook(folder=false){fab(false);type(folder);$('create').showModal();}
+$('newNotebook').onclick=()=>newNotebook();$('newFolder').onclick=()=>newNotebook(true);
+$('importPdf').onclick=()=>{fab(false);call('importPdf').catch(fail);};
+$('cancel').onclick=()=>$('create').close();$('cancelBottom').onclick=()=>$('create').close();
 document.querySelectorAll('[data-color]').forEach(b=>b.onclick=()=>{color=Number(b.dataset.color);document.querySelectorAll('[data-color]').forEach(c=>c.classList.toggle('chosen',c===b));});
-$('createForm').onsubmit=async e=>{e.preventDefault();const submit=e.submitter;submit.disabled=true;try{const b=await call('create',{title:$('name').value,folder:createFolder,color,parentId});$('create').close();await load();if(!b.folder)await open(b.id);}catch(err){fail(err);}finally{submit.disabled=false;}};
+$('createForm').onsubmit=async e=>{e.preventDefault();const submit=e.submitter;submit.disabled=true;try{const b=await call('create',{title:$('name').value,folder:createFolder,color,parentId,document:createFolder?'':TemplateStudio.document(),paper:TemplateStudio.paper()});$('create').close();await load();if(!b.folder)await open(b.id);}catch(err){fail(err);}finally{submit.disabled=false;}};
 async function quick(){try{const b=await call('create',{title:'Hızlı Not',parentId});await load();await open(b.id);}catch(e){fail(e);}}
 $('quick').onclick=quick;$('write').onclick=quick;$('photo').onclick=()=>call('photo').catch(fail);
 window.photoAdded=id=>{load();open(id).catch(fail);};
@@ -78,22 +95,23 @@ async function open(id){
  $('noteTitle').readOnly=b.deleted;$('noteBody').readOnly=b.deleted;$('save').hidden=b.deleted;$('restore').hidden=!b.deleted;
  $('noteImage').hidden=!b.imageUri;
  if(b.imageUri?.startsWith('data:image/'))$('noteImage').src=b.imageUri;else{$('noteImage').removeAttribute('src');$('noteImage').hidden=true;}
- $('saveStatus').textContent=b.deleted?'Silindi':'Cihazda kaydedildi';$('editor').hidden=false;$('editor').scrollTop=0;
+ $('saveStatus').textContent=b.deleted?'Silindi':'Cihazda kaydedildi';$('editor').hidden=false;InkStudio.open(b,changed);$('canvasScroll').scrollTop=0;
 }
 function changed(){if(!current||current.deleted)return;dirty=true;revision++;$('saveStatus').textContent='Kaydediliyor…';clearTimeout(saveTimer);saveTimer=setTimeout(()=>save().catch(fail),700);}
-$('noteTitle').oninput=changed;$('noteBody').oninput=changed;
+$('noteTitle').oninput=()=>{InkStudio.title($('noteTitle').value);changed();};$('noteBody').oninput=changed;
 function save(){
  clearTimeout(saveTimer);if(!current||!dirty||current.deleted)return saveChain;
- const rev=revision,args={id:current.id,title:$('noteTitle').value,content:$('noteBody').value};dirty=false;saving++;
+ const rev=revision,args={id:current.id,title:$('noteTitle').value,content:$('noteBody').value,document:InkStudio.serialize(),paper:InkStudio.paper()};dirty=false;saving++;
  const operation=saveChain.catch(()=>{}).then(()=>call('save',args)).then(()=>{if(current?.id===args.id&&revision===rev)$('saveStatus').textContent='Kaydedildi';}).catch(e=>{if(current?.id===args.id){dirty=true;$('saveStatus').textContent='Kayıt başarısız';}throw e;}).finally(()=>saving--);
  saveChain=operation;return operation;
 }
-async function closeEditor(){try{await save();$('editor').hidden=true;current=null;$('noteImage').removeAttribute('src');await load();}catch(e){fail(e);}}
+async function closeEditor(){try{await save();InkStudio.stop();$('editor').hidden=true;current=null;$('noteImage').removeAttribute('src');await load();}catch(e){fail(e);}}
 $('back').onclick=closeEditor;$('save').onclick=()=>save().catch(fail);
-$('delete').onclick=async()=>{if(!current)return;if(current.deleted&&!confirm('Kalıcı olarak silinsin mi? Bu işlem geri alınamaz.'))return;try{await save();await call(current.deleted?'remove':'trash',{id:current.id});current=null;$('editor').hidden=true;await load();}catch(e){fail(e);}};
-$('restore').onclick=async()=>{try{await call('restore',{id:current.id});current=null;$('editor').hidden=true;await load();}catch(e){fail(e);}};
+$('delete').onclick=async()=>{if(!current)return;if(current.deleted&&!confirm('Kalıcı olarak silinsin mi? Bu işlem geri alınamaz.'))return;try{await save();await call(current.deleted?'remove':'trash',{id:current.id});current=null;InkStudio.stop();$('editor').hidden=true;await load();}catch(e){fail(e);}};
+$('restore').onclick=async()=>{try{await call('restore',{id:current.id});current=null;InkStudio.stop();$('editor').hidden=true;await load();}catch(e){fail(e);}};
 document.addEventListener('visibilitychange',()=>{if(document.hidden)save().catch(fail);});
-window.goBack=()=>{const dialog=document.querySelector('dialog[open]');if(dialog){dialog.close();return true;}if(!$('editor').hidden){closeEditor();return true;}if($('sidebar').classList.contains('open')){drawer(false);return true;}if(parentId){parentId='';render();return true;}return false;};
+window.goBack=()=>{const dialog=document.querySelector('dialog[open]');if(dialog){dialog.close();return true;}if(!$('editor').hidden){if($('editor').classList.contains('zen'))$('exitZen').click();else closeEditor();return true;}if($('sidebar').classList.contains('open')){drawer(false);return true;}if(!$('fabMenu').hidden){fab(false);return true;}if($('editor').classList.contains('zen')){$('exitZen').click();return true;}if(parentId){parentId='';render();return true;}return false;};
+window.studioCall=call;TemplateStudio.init();InkStudio.init();
 load();
 
 window.flushNote=()=>{save().catch(fail);return true;};
