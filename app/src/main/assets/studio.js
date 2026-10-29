@@ -33,12 +33,28 @@
  function remember(){undo.push(page().strokes.slice());if(undo.length>25)undo.shift();redo=[];buttons();}
  function buttons(){$('undo').disabled=readonly||!undo.length;$('redo').disabled=readonly||!redo.length;$('starPage').setAttribute('aria-pressed',!!page().starred);$('starPage').classList.toggle('selected',!!page().starred);}
  function dirty(){buttons();changed();}
+ function nibScale(p,kind){
+  // Preserve compatibility with old documents while giving pressure a clear, gradual response.
+  p=Math.max(.02,Math.min(1,Number.isFinite(p)?p:.5));
+  return kind==='brush'?.2+p*1.6:kind==='fountain'?.35+p*1.3:.65+p*.7;
+ }
  function renderStroke(c,s){
   if(!s.points?.length)return;if(s.text){c.save();c.fillStyle=s.color;c.font=`${s.size||16}px ${s.serif?'Newsreader':'Manrope'}`;c.fillText(s.text,s.points[0].x,s.points[0].y);c.restore();return;}c.save();c.lineCap='round';c.lineJoin='round';c.strokeStyle=s.color;c.fillStyle=s.color;c.globalAlpha=s.opacity;
   c.globalCompositeOperation=s.tool==='eraser'?'destination-out':'source-over';
-  const pts=s.points;
-  if(pts.length===1){c.beginPath();c.arc(pts[0].x,pts[0].y,s.width/2,0,Math.PI*2);c.fill();}
-  else for(let i=1;i<pts.length;i++){c.lineWidth=s.width*(s.pen==='brush'?(.4+(pts[i].p||.5)*1.2):s.pen==='fountain'?(.7+(pts[i].p||.5)*.6):1);c.beginPath();c.moveTo(pts[i-1].x,pts[i-1].y);c.lineTo(pts[i].x,pts[i].y);c.stroke();}
+  const pts=s.points, radius=p=>Math.max(.65,s.width*nibScale(p,s.pen));
+  if(pts.length===1){c.beginPath();c.arc(pts[0].x,pts[0].y,radius(pts[0].p)/2,0,Math.PI*2);c.fill();}
+  else{
+   // Use short quadratic arcs through sample midpoints: curves stay connected at joins,
+   // and round caps prevent hairline gaps when the device sends sparse samples.
+   const midpoint=(a,b)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2,p:((a.p??.5)+(b.p??.5))/2});
+   const segment=(from,control,to,pressure)=>{c.lineWidth=radius(pressure);c.beginPath();c.moveTo(from.x,from.y);if(control)c.quadraticCurveTo(control.x,control.y,to.x,to.y);else c.lineTo(to.x,to.y);c.stroke();};
+   if(pts.length===2)segment(pts[0],null,pts[1],((pts[0].p??.5)+(pts[1].p??.5))/2);
+   else{
+    segment(pts[0],pts[0],midpoint(pts[0],pts[1]),pts[0].p);
+    for(let i=1;i<pts.length-1;i++)segment(midpoint(pts[i-1],pts[i]),pts[i],midpoint(pts[i],pts[i+1]),pts[i].p);
+    const n=pts.length;segment(midpoint(pts[n-2],pts[n-1]),pts[n-1],pts[n-1],pts[n-1].p);
+   }
+  }
   c.restore();
  }
  function redraw(){if(!ctx)return;ctx.clearRect(0,0,W,H);for(const s of page().strokes)renderStroke(ctx,s);if(active&&active.tool!=='lasso')renderStroke(ctx,active);overlay();}
@@ -48,7 +64,7 @@
   if(lasso.length){ctx.beginPath();lasso.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.stroke();}
   const b=bounds();if(b)ctx.strokeRect(b.x-10,b.y-10,b.right-b.x+20,b.bottom-b.y+20);ctx.restore();
  }
- function point(e){const r=canvas.getBoundingClientRect();return {x:(e.clientX-r.left)*W/r.width,y:(e.clientY-r.top)*H/r.height,p:e.pressure||.5};}
+ function point(e){const r=canvas.getBoundingClientRect();const raw=Number(e.pressure);const p=e.pointerType==='mouse'||!Number.isFinite(raw)? .5 : Math.max(.02,Math.min(1,raw||.5));return {x:(e.clientX-r.left)*W/r.width,y:(e.clientY-r.top)*H/r.height,p};}
  function inPolygon(p,polygon){let inside=false;for(let i=0,j=polygon.length-1;i<polygon.length;j=i++){const a=polygon[i],b=polygon[j];if(((a.y>p.y)!==(b.y>p.y))&&(p.x<(b.x-a.x)*(p.y-a.y)/(b.y-a.y)+a.x))inside=!inside;}return inside;}
  function down(e){
   if(readonly||tool==='text'||e.button>0||active||moving)return;e.preventDefault();canvas.setPointerCapture(e.pointerId);const p=point(e);
@@ -65,8 +81,8 @@
   if(active.pointer!==e.pointerId)return;
   if(active.tool==='lasso'){lasso.push(point(e));schedule();return;}
   if(active.straight){active.points=[active.points[0],point(e)];schedule();return;}
-  for(const event of e.getCoalescedEvents?.()||[e]){
-   const p=point(event),last=active.points.at(-1);if(Math.hypot(p.x-last.x,p.y-last.y)<.8)continue;
+  const samples=e.getCoalescedEvents?.();for(const event of samples?.length?samples:[e]){
+   const p=point(event),last=active.points.at(-1);if(Math.hypot(p.x-last.x,p.y-last.y)<.35)continue;
    if(active.points.length>=20000)break;
    active.points.push(p);renderStroke(ctx,{...active,points:[last,p]});
   }
@@ -75,6 +91,7 @@
   if(moving){moving=null;redraw();dirty();return;}
   if(!active||active.pointer!==e.pointerId)return;
   if(active.tool==='lasso'){selection=page().strokes.map((s,i)=>s.tool!=='eraser'&&s.points.some(p=>inPolygon(p,lasso))?i:-1).filter(i=>i>=0);lasso=[];active=null;redraw();return;}
+  const last=active.points.at(-1);if(Number.isFinite(e.clientX)&&Number.isFinite(e.clientY)){const end=point(e);if(!e.pressure)end.p=last.p;if(Math.hypot(end.x-last.x,end.y-last.y)>.35){if(active.straight)active.points=[active.points[0],end];else active.points.push(end);}}
   const {pointer,straight,...stroke}=active;page().strokes.push(stroke);active=null;redraw();dirty();
  }
  function dimensions(){const ratio=doc.size==='a4'?Math.SQRT2:1.38;H=doc.orientation==='landscape'?Math.round(W/ratio):Math.round(W*ratio);const dpr=Math.min(1.5,Math.max(1,(document.documentElement.clientWidth/W)*(window.devicePixelRatio||1)));canvas.width=W*dpr;canvas.height=H*dpr;ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);$('drawingPage').style.aspectRatio=`${W}/${H}`;applyZoom();}
